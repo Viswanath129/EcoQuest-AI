@@ -1,0 +1,6 @@
+{
+  "name": "EcoQuest AI",
+  "description": "Transform carbon footprint reduction into an engaging gamified experience with personalized eco-challenges, XP, achievements, and AI Coaching.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

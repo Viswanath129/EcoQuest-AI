@@ -1,17 +1,43 @@
-# Run and deploy your AI Studio app
+# EcoQuest (ClimateOS v2) 🌍
 
-This contains everything you need to run your app locally.
+**A local-first, AI-driven action engine for measurable climate impact.**
 
-View your app in AI Studio: https://ai.studio/apps/deaccbee-a83f-4a9e-a112-a37e9c482eaa
+This isn't a carbon calculator. It’s a mission optimization engine. We use Gemini integration combined with an offline-first Room Database state engine to find the highest-ROI behavior changes that fit your lifestyle with the lowest friction.
 
-## Run Locally
+## The Architecture
 
-**Prerequisites:**  [Android Studio](https://developer.android.com/studio)
+![Architecture Ecosystem]
+```text
+           [ Jetpack Compose UI ] (Reactive State)
+                     |
+            (ViewModel / Flow)
+                     |
+         [ Local Room Database ] <===> [ Offline Sync & State Recovery ]
+                     |
+[ Gemini API (Generative AI Coach) ]  (Remote Generation when online)
+```
 
+## Resilience Engineering
 
-1. Open Android Studio
-2. Select **Open** and choose the directory containing this project
-3. Allow Android Studio to fix any incompatibilities as it imports the project.
-4. Create a file named `.env` in the project directory and set `GEMINI_API_KEY` in that file to your Gemini API key (see `.env.example` for an example)
-5. Remove this line from the app's `build.gradle.kts` file: `signingConfig = signingConfigs.getByName("debugConfig")`
-6. Run the app on an emulator or physical device
+We built EcoQuest differently from most hackathon projects. Every action is local-first, meaning the application stays alive even when network access drops or the Gemini API responds unpredictably.
+
+Key Features:
+* **Crash Telemetry:** Added error recovery on all network calls.
+* **Schema Validation:** Graceful parsing and recovery from malformed Gemini responses using strict try/catch blocks.
+* **Deterministic Flow:** You never wait for a prompt to "think" — generation is asynchronous with background message states.
+* **Immediate Local State:** Actions instantly save to Room DB so data is never lost.
+
+## Design Philosophy
+
+**Clarity > Decoration**
+**Impact First > Points Second**
+
+We removed gamified visual noise to focus the user on real-world impact. The application features a clean, high-contrast, edge-to-edge layout that highlights CO₂ savings and future modeling.
+
+*   No fake points.
+*   No unnecessary tabs.
+*   Pure action.
+
+## Demo Video
+
+[Link to 2-minute Demo Video - TBD]

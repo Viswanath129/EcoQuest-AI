@@ -1,6 +1,7 @@
 package com.example.data
 
 import kotlinx.coroutines.flow.Flow
+import androidx.room.withTransaction
 
 class EcoRepository(private val db: EcoDatabase) {
 
@@ -11,6 +12,32 @@ class EcoRepository(private val db: EcoDatabase) {
     val allQuests: Flow<List<Quest>> = questDao.getAllQuests()
     val userStats: Flow<UserStats?> = userStatsDao.getUserStats(1)
     val chatHistory: Flow<List<ChatMessage>> = chatDao.getChatHistory()
+
+    suspend fun completeQuestAtomic(questId: Int, xpGain: Int, co2SavedGain: Double, levelUpLogic: (Int, Int) -> Triple<Int, Int, Int>): Boolean {
+        return db.withTransaction {
+            val q = questDao.getQuestById(questId)
+            if (q == null || q.completed) {
+                return@withTransaction false
+            }
+            
+            questDao.updateQuest(q.copy(completed = true))
+            
+            val currentStats = userStatsDao.getUserStatsSync(1) ?: UserStats()
+            val newXp = currentStats.xp + xpGain
+            
+            val (newLevel, finalXp, nextLevelXp) = levelUpLogic(currentStats.level, newXp)
+            
+            val newStats = currentStats.copy(
+                level = newLevel,
+                xp = finalXp,
+                xpToNextLevel = nextLevelXp,
+                co2SavedCumulative = currentStats.co2SavedCumulative + co2SavedGain,
+                missionsCompleted = currentStats.missionsCompleted + 1
+            )
+            userStatsDao.insertOrUpdate(newStats)
+            return@withTransaction true
+        }
+    }
 
     suspend fun getUserStatsSync(): UserStats? = userStatsDao.getUserStatsSync(1)
 
@@ -36,6 +63,10 @@ class EcoRepository(private val db: EcoDatabase) {
 
     suspend fun clearAllQuests() {
         questDao.clearAllQuests()
+    }
+
+    suspend fun clearUncompletedQuests() {
+        questDao.clearUncompletedQuests()
     }
 
     suspend fun addChatMessage(message: ChatMessage) {

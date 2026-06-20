@@ -8,6 +8,9 @@ interface QuestDao {
     @Query("SELECT * FROM quests ORDER BY timestamp DESC")
     fun getAllQuests(): Flow<List<Quest>>
 
+    @Query("SELECT * FROM quests WHERE id = :id LIMIT 1")
+    suspend fun getQuestById(id: Int): Quest?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertQuests(quests: List<Quest>)
 
@@ -22,6 +25,9 @@ interface QuestDao {
 
     @Query("DELETE FROM quests")
     suspend fun clearAllQuests()
+
+    @Query("DELETE FROM quests WHERE completed = 0")
+    suspend fun clearUncompletedQuests()
 }
 
 @Dao
@@ -38,7 +44,7 @@ interface UserStatsDao {
 
 @Dao
 interface ChatDao {
-    @Query("SELECT * FROM chat_messages ORDER BY timestamp ASC")
+    @Query("SELECT * FROM (SELECT * FROM chat_messages ORDER BY timestamp DESC LIMIT 100) ORDER BY timestamp ASC")
     fun getChatHistory(): Flow<List<ChatMessage>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

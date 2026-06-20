@@ -18,15 +18,13 @@ abstract class EcoDatabase : RoomDatabase() {
 
         fun getDatabase(context: Context): EcoDatabase {
             return INSTANCE ?: synchronized(this) {
-                val instance = Room.databaseBuilder(
+                INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     EcoDatabase::class.java,
                     "ecoquest_database"
                 )
                 .fallbackToDestructiveMigration()
-                .build()
-                INSTANCE = instance
-                instance
+                .build().also { INSTANCE = it }
             }
         }
     }

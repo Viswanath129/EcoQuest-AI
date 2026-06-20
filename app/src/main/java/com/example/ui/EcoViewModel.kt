@@ -4,6 +4,7 @@ import android.app.Application
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.util.Crashlytics
 import com.example.data.*
 import com.example.network.*
 import com.squareup.moshi.Moshi
@@ -11,6 +12,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
 class EcoViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -33,6 +35,9 @@ class EcoViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _isGeneratingQuests = MutableStateFlow(false)
     val isGeneratingQuests: StateFlow<Boolean> = _isGeneratingQuests.asStateFlow()
+
+    private val _loadingMessage = MutableStateFlow("Preparing green engine...")
+    val loadingMessage: StateFlow<String> = _loadingMessage.asStateFlow()
 
     private val _isSendingMessage = MutableStateFlow(false)
     val isSendingMessage: StateFlow<Boolean> = _isSendingMessage.asStateFlow()
@@ -135,45 +140,37 @@ class EcoViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             if (quest.completed) return@launch
 
-            val updatedQuest = quest.copy(completed = true)
-            repository.updateQuest(updatedQuest)
+            val levelStrategy = { currentLevel: Int, currentXp: Int ->
+                var level = currentLevel
+                var xp = currentXp
+                var xpNeeded = getXpNeededForLevel(level)
 
-            val currentStats = repository.getUserStatsSync() ?: UserStats()
-            val newXp = currentStats.xp + quest.xp
-            val currentLevel = currentStats.level
+                // Level up logic
+                while (xp >= xpNeeded && level < 5) {
+                    xp -= xpNeeded
+                    level++
+                    xpNeeded = getXpNeededForLevel(level)
+                }
 
-            var level = currentLevel
-            var xp = newXp
-            var xpNeeded = currentStats.xpToNextLevel
-
-            // Level up logic (each level requires exponentially more XP or standard 100/150/200)
-            while (xp >= xpNeeded && level < 5) {
-                xp -= xpNeeded
-                level++
-                xpNeeded = getXpNeededForLevel(level)
+                if (xp >= xpNeeded && level >= 5) {
+                    // Cap at level 5
+                    xp = xpNeeded
+                }
+                Triple(level, xp, getXpNeededForLevel(level))
             }
 
-            if (xp >= xpNeeded && level >= 5) {
-                // Cap at level 5
-                xp = xpNeeded
-            }
-
-            val co2Saved = currentStats.co2SavedCumulative + quest.co2Saved
-            val completedCount = currentStats.missionsCompleted + 1
-
-            repository.saveUserStats(
-                currentStats.copy(
-                    level = level,
-                    xp = xp,
-                    xpToNextLevel = xpNeeded,
-                    co2SavedCumulative = co2Saved,
-                    missionsCompleted = completedCount
-                )
+            val success = repository.completeQuestAtomic(
+                questId = quest.id,
+                xpGain = quest.xp,
+                co2SavedGain = quest.co2Saved,
+                levelUpLogic = levelStrategy
             )
 
-            // Trigger visual overlay celebration callback
-            _recentCelebrationQuest.value = quest
-            _showCelebration.value = true
+            if (success) {
+                // Trigger visual overlay celebration callback
+                _recentCelebrationQuest.value = quest
+                _showCelebration.value = true
+            }
         }
     }
 
@@ -256,8 +253,24 @@ class EcoViewModel(application: Application) : AndroidViewModel(application) {
 
     // Request new daily quests from Gemini AI or simulated offline generator
     fun generateMissions(silent: Boolean = false) {
+        if (_isGeneratingQuests.value) return
         viewModelScope.launch {
             if (!silent) _isGeneratingQuests.value = true
+            
+            // Progressive progress messages
+            val progressJob = launch {
+                val messages = listOf(
+                    "Analyzing lifestyle...",
+                    "Calculating carbon impact...",
+                    "Building recommendations...",
+                    "Generating personalized missions..."
+                )
+                for (msg in messages) {
+                    _loadingMessage.value = msg
+                    kotlinx.coroutines.delay(1200)
+                }
+            }
+
             try {
                 val stats = repository.getUserStatsSync() ?: UserStats()
                 
@@ -297,27 +310,32 @@ class EcoViewModel(application: Application) : AndroidViewModel(application) {
                     )
 
                     val response = withContext(Dispatchers.IO) {
-                        GeminiApiClient.service.generateContent(GeminiApiClient.getApiKey(), request)
-                    }
-
-                    var jsonText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text ?: ""
-                    Log.d("EcoQuest", "Gemini Quests raw response: $jsonText")
-
-                    // Strip markdown block ticks if they exist
-                    jsonText = jsonText.trim()
-                    if (jsonText.startsWith("```")) {
-                        jsonText = jsonText.substringAfter("```json").substringAfter("```").trim()
-                        if (jsonText.endsWith("```")) {
-                            jsonText = jsonText.substringBeforeLast("```").trim()
+                        withTimeout(15000L) { // 15-second timeout for Gemini AI requests
+                            GeminiApiClient.service.generateContent(GeminiApiClient.getApiKey(), request)
                         }
                     }
 
+                    val jsonText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text ?: ""
+                    Log.d("EcoQuest", "Gemini Quests raw response: $jsonText")
+
+                    // Clean and safely parse JSON block
+                    fun safeExtractJson(text: String): String {
+                        val start = text.indexOf("{")
+                        val end = text.lastIndexOf("}")
+                        if (start != -1 && end != -1 && end > start) {
+                            return text.substring(start, end + 1)
+                        }
+                        return text.trim()
+                    }
+
+                    val cleanJson = safeExtractJson(jsonText)
+                    
                     val moshi = GeminiApiClient.moshiInstance
                     val listAdapter = moshi.adapter(GeneratedQuestsList::class.java)
-                    val parsed = listAdapter.fromJson(jsonText)
+                    val parsed = listAdapter.fromJson(cleanJson)
 
                     if (parsed != null && parsed.quests.isNotEmpty()) {
-                        repository.clearAllQuests()
+                        repository.clearUncompletedQuests()
                         val mappedQuests = parsed.quests.map { q ->
                             Quest(
                                 title = q.title,
@@ -340,11 +358,13 @@ class EcoViewModel(application: Application) : AndroidViewModel(application) {
                     generateFallbackQuests(stats)
                 }
             } catch (e: Exception) {
+                Crashlytics.recordException(e)
                 Log.e("EcoQuest", "Gemini quest generation error: ", e)
                 // Graceful fallback to rich static templates
                 val stats = repository.getUserStatsSync() ?: UserStats()
                 generateFallbackQuests(stats)
             } finally {
+                progressJob.cancel()
                 if (!silent) _isGeneratingQuests.value = false
             }
         }
@@ -443,7 +463,7 @@ class EcoViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         // Wipe old quests and insert new ones
-        repository.clearAllQuests()
+        repository.clearUncompletedQuests()
         repository.saveQuests(simulatedQuests)
     }
 
@@ -501,6 +521,7 @@ class EcoViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
             } catch (e: Exception) {
+                Crashlytics.recordException(e)
                 Log.e("EcoQuest", "Chat coach response error: ", e)
                 repository.addChatMessage(
                     ChatMessage(

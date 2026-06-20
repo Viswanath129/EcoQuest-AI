@@ -16,9 +16,11 @@ import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
@@ -34,6 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.data.ChatMessage
 import com.example.data.Quest
 import com.example.data.UserStats
@@ -44,10 +47,10 @@ import kotlin.random.Random
 
 // --- Navigation Tabs ---
 enum class EcoTab(val label: String, val icon: ImageVector) {
-    DASHBOARD("Dashboard", Icons.Default.Home),
-    QUESTS("Quests", Icons.Default.Star),
-    LEADERBOARD("Leaders", Icons.Default.Leaderboard),
-    COACH("AI Coach", Icons.AutoMirrored.Filled.Chat),
+    DASHBOARD("Home", Icons.Default.Home),
+    QUESTS("Actions", Icons.Default.List),
+    COACH("Coach", Icons.AutoMirrored.Filled.Chat),
+    INSIGHTS("Insights", Icons.Default.Public),
     PROFILE("Profile", Icons.Default.Person)
 }
 
@@ -58,16 +61,17 @@ fun EcoQuestApp(
     viewModel: EcoViewModel,
     modifier: Modifier = Modifier
 ) {
-    val userStats by viewModel.userStats.collectAsState()
-    val quests by viewModel.quests.collectAsState()
-    val chatHistory by viewModel.chatHistory.collectAsState()
-    val isGeneratingQuests by viewModel.isGeneratingQuests.collectAsState()
-    val isSendingMessage by viewModel.isSendingMessage.collectAsState()
-    val showCelebration by viewModel.showCelebration.collectAsState()
-    val recentQuest by viewModel.recentCelebrationQuest.collectAsState()
-    val isApiKeyWarning by viewModel.apiKeyWarning.collectAsState()
+    val userStats by viewModel.userStats.collectAsStateWithLifecycle()
+    val quests by viewModel.quests.collectAsStateWithLifecycle()
+    val chatHistory by viewModel.chatHistory.collectAsStateWithLifecycle()
+    val isGeneratingQuests by viewModel.isGeneratingQuests.collectAsStateWithLifecycle()
+    val loadingMessage by viewModel.loadingMessage.collectAsStateWithLifecycle()
+    val isSendingMessage by viewModel.isSendingMessage.collectAsStateWithLifecycle()
+    val showCelebration by viewModel.showCelebration.collectAsStateWithLifecycle()
+    val recentQuest by viewModel.recentCelebrationQuest.collectAsStateWithLifecycle()
+    val isApiKeyWarning by viewModel.apiKeyWarning.collectAsStateWithLifecycle()
 
-    var currentTab by remember { mutableStateOf(EcoTab.DASHBOARD) }
+    var currentTab by rememberSaveable { mutableStateOf(EcoTab.DASHBOARD) }
 
     // Seed initial database stats and messages
     LaunchedEffect(Unit) {
@@ -134,17 +138,18 @@ fun EcoQuestApp(
                         EcoTab.QUESTS -> QuestsScreen(
                             quests = quests,
                             isGenerating = isGeneratingQuests,
+                            loadingMessage = loadingMessage,
                             viewModel = viewModel,
                             isApiKeyWarning = isApiKeyWarning
-                        )
-                        EcoTab.LEADERBOARD -> LeaderboardScreen(
-                            stats = userStats
                         )
                         EcoTab.COACH -> CoachScreen(
                             chatHistory = chatHistory,
                             isSending = isSendingMessage,
                             viewModel = viewModel,
                             isWarning = isApiKeyWarning
+                        )
+                        EcoTab.INSIGHTS -> InsightsScreen(
+                            stats = userStats
                         )
                         EcoTab.PROFILE -> ProfileScreen(
                             stats = userStats,
@@ -180,485 +185,85 @@ fun DashboardScreen(
             .verticalScroll(scrollState)
             .padding(16.dp)
     ) {
-        // Hero Header
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Column {
-                Text(
-                    text = "Welcome Back! 👋",
-                    fontSize = 16.sp,
-                    color = EcoTextMuted,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = "EcoQuest AI",
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-            }
-
-            // Daily Streak Badge
-            Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(20.dp))
-                    .background(EcoWarning.copy(alpha = 0.15f))
-                    .border(1.dp, EcoWarning.copy(alpha = 0.4f), RoundedCornerShape(20.dp))
-                    .padding(horizontal = 12.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Default.LocalFireDepartment,
-                    contentDescription = "Streak",
-                    tint = EcoWarning,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "${resolvedStats.streakDays} Day Streak",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    color = EcoWarning
-                )
-            }
+        // Hero Impact Card
+        Column(modifier = Modifier.padding(top = 16.dp, bottom = 32.dp)) {
+            Text(
+                "Good Evening",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+                color = EcoTextMuted
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "Carbon Impact",
+                fontSize = 32.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+            Text(
+                String.format("%.1f kg CO₂ saved", resolvedStats.co2SavedCumulative),
+                fontSize = 40.sp,
+                fontWeight = FontWeight.Black,
+                color = EcoPrimary,
+                letterSpacing = (-1).sp
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Text(
+                "↑ 24% this month", // Trend narrative
+                fontSize = 16.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = EcoAccent
+            )
         }
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Level & XP Progress Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = "LEVEL ${resolvedStats.level}",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = viewModel.getLevelName(resolvedStats.level),
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 20.sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-
-                    // Level Badge Icon (Custom design)
-                    Box(
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.EmojiEvents,
-                            contentDescription = "Badge",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(28.dp)
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // XP Progress Bar
-                val progress = resolvedStats.xp.toFloat() / resolvedStats.xpToNextLevel.toFloat()
-                LinearProgressIndicator(
-                    progress = { progress },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(10.dp)
-                        .clip(RoundedCornerShape(5.dp)),
-                    color = MaterialTheme.colorScheme.primary,
-                    trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+        Spacer(modifier = Modifier.height(32.dp))
+        
+        // Simple Ring
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth()) {
+            Canvas(modifier = Modifier.size(160.dp)) {
+                drawArc(
+                    color = Color(0xFFF1F5F9),
+                    startAngle = -90f,
+                    sweepAngle = 360f,
+                    useCenter = false,
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 8.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
                 )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "${resolvedStats.xp} XP",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "Next level: ${resolvedStats.xpToNextLevel} XP",
-                        fontSize = 12.sp,
-                        color = EcoTextMuted
-                    )
-                }
+                val scoreSweep = (resolvedStats.carbonScore.toFloat() / 100f) * 360f
+                drawArc(
+                    color = EcoPrimary,
+                    startAngle = -90f,
+                    sweepAngle = scoreSweep,
+                    useCenter = false,
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 8.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
+                )
             }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Animated Carbon scoring gauge card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "AI Carbon Score",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.fillMaxWidth()
+                    text = "${resolvedStats.carbonScore}",
+                    fontSize = 48.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onBackground
                 )
-                Text(
-                    text = "Assessment from transportation, eating, and electricity",
-                    fontSize = 13.sp,
-                    color = EcoTextMuted,
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceAround
-                ) {
-                    // Custom circular gauge
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier.size(110.dp)
-                    ) {
-                        Canvas(modifier = Modifier.size(100.dp)) {
-                            drawArc(
-                                color = Color.LightGray.copy(alpha = 0.3f),
-                                startAngle = 135f,
-                                sweepAngle = 270f,
-                                useCenter = false,
-                                style = Stroke(width = 10.dp.toPx(), cap = StrokeCap.Round)
-                            )
-                            val scoreSweep = (resolvedStats.carbonScore.toFloat() / 100f) * 270f
-                            drawArc(
-                                brush = Brush.sweepGradient(
-                                    listOf(EcoDanger, EcoWarning, EcoPrimary)
-                                ),
-                                startAngle = 135f,
-                                sweepAngle = scoreSweep,
-                                useCenter = false,
-                                style = Stroke(width = 10.dp.toPx(), cap = StrokeCap.Round)
-                            )
-                        }
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = "${resolvedStats.carbonScore}",
-                                fontSize = 28.sp,
-                                fontWeight = FontWeight.Black,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = "out of 100",
-                                fontSize = 10.sp,
-                                color = EcoTextMuted
-                            )
-                        }
-                    }
-
-                    // Stat numbers column
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Column {
-                            Text("Annual Emissions", fontSize = 11.sp, color = EcoTextMuted)
-                            Text(
-                                text = String.format("%.1f Tons CO₂", resolvedStats.annualEmissions),
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = EcoDanger
-                            )
-                        }
-                        Column {
-                            Text("Impact Category", fontSize = 11.sp, color = EcoTextMuted)
-                            val catColor = when (resolvedStats.impactCategory) {
-                                "Low" -> EcoPrimary
-                                "Moderate" -> EcoWarning
-                                else -> EcoDanger
-                            }
-                            Text(
-                                text = resolvedStats.impactCategory,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = catColor
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Comparisons
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = "Analysis",
-                        tint = EcoPrimary,
-                        modifier = Modifier.size(18.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Your daily habits put you in the top 33% of green users!",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontWeight = FontWeight.Medium
-                    )
-                }
+                Text("Impact Score", fontSize = 12.sp, color = EcoTextMuted)
+                val scoreLabel = if (resolvedStats.carbonScore >= 80) "GOOD" else "ALERT"
+                Text(scoreLabel, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.padding(top = 4.dp))
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
 
-        // Live Total Stat Highlights
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Card(
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Icon(
-                        imageVector = Icons.Default.CloudQueue,
-                        contentDescription = "CO2",
-                        tint = EcoPrimary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = String.format("%.1f kg", resolvedStats.co2SavedCumulative),
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text("Total CO₂ Saved", fontSize = 11.sp, color = EcoTextMuted)
-                }
-            }
 
-            Card(
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Icon(
-                        imageVector = Icons.Default.TaskAlt,
-                        contentDescription = "Tasks Completed",
-                        tint = EcoAccent,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "${resolvedStats.missionsCompleted}",
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text("Missions Mastered", fontSize = 11.sp, color = EcoTextMuted)
-                }
-            }
-        }
 
-        Spacer(modifier = Modifier.height(16.dp))
 
-        // Projections Futures Simulator Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "Future Carbon Simulator",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = "See your ecological accumulation over time",
-                    fontSize = 12.sp,
-                    color = EcoTextMuted,
-                    modifier = Modifier.padding(bottom = 12.dp)
-                )
 
-                var sliderValue by remember { mutableStateOf(5f) } // default 5 years
 
-                // Dynamically projected calculations
-                val annual = resolvedStats.annualEmissions
-                val projectedTons = annual * sliderValue
-                // 1 tree absorbs about 22kg CO2, corresponding to 0.022 Ton offset annually
-                val treesNeeded = (projectedTons / 0.022).toInt()
 
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(MaterialTheme.colorScheme.background)
-                        .padding(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "Timeline:",
-                            fontSize = 13.sp,
-                            color = EcoTextMuted
-                        )
-                        Text(
-                            text = "${sliderValue.toInt()} Years Projection",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
 
-                    Spacer(modifier = Modifier.height(4.dp))
 
-                    Slider(
-                        value = sliderValue,
-                        onValueChange = { sliderValue = it },
-                        valueRange = 1f..10f,
-                        steps = 8,
-                        colors = SliderDefaults.colors(
-                            thumbColor = MaterialTheme.colorScheme.primary,
-                            activeTrackColor = MaterialTheme.colorScheme.primary,
-                            inactiveTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)
-                        )
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text("Projected Emissions", fontSize = 10.sp, color = EcoTextMuted)
-                            Text(
-                                text = String.format("%.1f Tons CO₂", projectedTons),
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = EcoDanger
-                            )
-                        }
-
-                        Column(horizontalAlignment = Alignment.End) {
-                            Text("Trees Required to Offset", fontSize = 10.sp, color = EcoTextMuted)
-                            Text(
-                                text = "$treesNeeded Trees",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = EcoPrimary
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Horizontally Scrollable Achievement Badges
-        Text(
-            text = "Achievement Badges",
-            fontWeight = FontWeight.Bold,
-            fontSize = 18.sp,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(bottom = 8.dp)
-        ) {
-            val achievements = listOf(
-                BadgeItem("🌱", "Eco Starter", "Complete your profile check", true),
-                BadgeItem("⚡", "Volt Buster", "Master 3 standby energy quests", resolvedStats.missionsCompleted >= 1),
-                BadgeItem("🥗", "Meat Optimizer", "Record 2 vegetarian meals", resolvedStats.missionsCompleted >= 2),
-                BadgeItem("🚲", "Cycle Champ", "Complete a transit quest", resolvedStats.missionsCompleted >= 3),
-                BadgeItem("👑", "Earth Guardian", "Maintain a 5 day streak", resolvedStats.streakDays >= 5)
-            )
-
-            items(achievements) { badge ->
-                Card(
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (badge.unlocked) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)
-                    ),
-                    border = BorderStroke(
-                        width = 1.dp,
-                        color = if (badge.unlocked) EcoPrimary.copy(alpha = 0.3f) else Color.Transparent
-                    ),
-                    modifier = Modifier.width(135.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = badge.emoji,
-                            fontSize = 32.sp,
-                            modifier = Modifier.padding(bottom = 4.dp)
-                        )
-                        Text(
-                            text = badge.title,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
-                            textAlign = TextAlign.Center,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = badge.desc,
-                            fontSize = 10.sp,
-                            color = EcoTextMuted,
-                            textAlign = TextAlign.Center,
-                            maxLines = 2,
-                            lineHeight = 11.sp,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.fillMaxWidth().height(24.dp)
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = if (badge.unlocked) "ACTIVED" else "LOCKED",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (badge.unlocked) EcoPrimary else EcoTextMuted,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(if (badge.unlocked) EcoPrimary.copy(alpha = 0.15f) else Color.LightGray.copy(alpha = 0.2f))
-                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-            }
-        }
     }
 }
 
@@ -669,6 +274,7 @@ data class BadgeItem(val emoji: String, val title: String, val desc: String, val
 fun QuestsScreen(
     quests: List<Quest>,
     isGenerating: Boolean,
+    loadingMessage: String,
     viewModel: EcoViewModel,
     isApiKeyWarning: Boolean
 ) {
@@ -752,7 +358,29 @@ fun QuestsScreen(
             }
         }
 
-        if (quests.isEmpty()) {
+        if (isGenerating) {
+            Box(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(32.dp)
+                ) {
+                    CircularProgressIndicator(
+                        color = EcoPrimary,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Text(
+                        text = loadingMessage,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
+        } else if (quests.isEmpty()) {
             Box(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 contentAlignment = Alignment.Center
@@ -770,16 +398,48 @@ fun QuestsScreen(
                 }
             }
         } else {
+            val activeQuests = quests.filter { !it.completed }
+            val completedQuests = quests.filter { it.completed }
+
             LazyColumn(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(quests) { quest ->
-                    QuestCard(
-                        quest = quest,
-                        onCompleteClick = { viewModel.completeQuest(quest) }
-                    )
+                if (activeQuests.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "Active Missions",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    }
+                    items(activeQuests) { quest ->
+                        QuestCard(
+                            quest = quest,
+                            onCompleteClick = { viewModel.completeQuest(quest) }
+                        )
+                    }
+                }
+
+                if (completedQuests.isNotEmpty()) {
+                    item {
+                        Text(
+                            text = "Completed & Saved",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                        )
+                    }
+                    items(completedQuests) { quest ->
+                        QuestCard(
+                            quest = quest,
+                            onCompleteClick = { viewModel.completeQuest(quest) }
+                        )
+                    }
                 }
             }
         }
@@ -793,148 +453,310 @@ fun QuestCard(
 ) {
     var expanded by remember { mutableStateOf(false) }
 
+    val rawTitle = quest.title.trim()
+    var emojiStr = "🌱"
+    var cleanTitle = rawTitle
+
+    if (rawTitle.isNotEmpty()) {
+        val firstCodePoint = rawTitle.codePointAt(0)
+        val charCount = Character.charCount(firstCodePoint)
+        if (firstCodePoint > 127) {
+            emojiStr = rawTitle.substring(0, charCount)
+            cleanTitle = rawTitle.substring(charCount).trim()
+        }
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .testTag("quest_card_${quest.id}"),
-        shape = RoundedCornerShape(16.dp),
+            .testTag("quest_card_${quest.id}")
+            .clickable { expanded = !expanded },
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (quest.completed) MaterialTheme.colorScheme.primary.copy(alpha = 0.05f) else MaterialTheme.colorScheme.surface
         ),
         border = BorderStroke(
             width = 1.dp,
-            color = if (quest.completed) EcoPrimary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
-        )
+            color = if (quest.completed) EcoPrimary.copy(alpha = 0.5f) else Color(0xFFE2E8F0)
+        ),
+        elevation = CardDefaults.cardElevation(0.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            // Main Hero Area
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = emojiStr,
+                    fontSize = 24.sp,
+                    modifier = Modifier.padding(end = 12.dp)
+                )
+                Text(
+                    text = cleanTitle,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 20.sp,
+                    color = MaterialTheme.colorScheme.onBackground,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Spacer(modifier = Modifier.height(16.dp))
+            
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                Column {
                     Text(
-                        text = quest.title,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp,
-                        color = if (quest.completed) EcoPrimary else MaterialTheme.colorScheme.onSurface
+                        text = "Save ${quest.co2Saved} kg CO₂",
+                        fontSize = 16.sp,
+                        color = EcoSecondary,
+                        fontWeight = FontWeight.Bold
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = quest.description,
-                        fontSize = 14.sp,
-                        color = EcoTextMuted,
-                        lineHeight = 18.sp
+                        text = quest.estimatedTime.ifEmpty { "10 min" },
+                        fontSize = 13.sp,
+                        color = EcoTextMuted
                     )
                 }
-
-                // Status Action indicator
+                
                 if (quest.completed) {
                     Icon(
                         imageVector = Icons.Default.CheckCircle,
                         contentDescription = "Completed",
                         tint = EcoPrimary,
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(32.dp)
                     )
                 } else {
                     Button(
                         onClick = onCompleteClick,
-                        modifier = Modifier.testTag("complete_quest_btn_${quest.id}"),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = EcoPrimary)
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.onBackground)
                     ) {
-                        Text("Complete", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text("Start", fontWeight = FontWeight.Bold)
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Specs Chips Row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                // XP Score chip
-                Text(
-                    text = "+${quest.xp} XP",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = EcoSecondary,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(EcoSecondary.copy(alpha = 0.12f))
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                )
-
-                // CO2 saved chip
-                Text(
-                    text = "saved ${quest.co2Saved}kg CO₂",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = EcoSuccess,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(EcoSuccess.copy(alpha = 0.12f))
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                )
-
-                // Difficulty chip
-                val diffColor = when (quest.difficulty) {
-                    "Easy" -> EcoPrimary
-                    "Medium" -> EcoWarning
-                    else -> EcoDanger
-                }
-                Text(
-                    text = quest.difficulty,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = diffColor,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(diffColor.copy(alpha = 0.12f))
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                )
-
-                Spacer(modifier = Modifier.weight(1f))
-
-                // Toggle Detail Expander
-                IconButton(
-                    onClick = { expanded = !expanded },
-                    modifier = Modifier.size(24.dp)
-                ) {
-                    Icon(
-                        imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = "Expand details",
-                        tint = EcoTextMuted
-                    )
-                }
-            }
-
-            // Expanded Science description block
+            // AI Reasoning Area
             AnimatedVisibility(visible = expanded) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(top = 12.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.background)
-                        .padding(12.dp)
+                        .padding(top = 24.dp)
                 ) {
                     Text(
-                        text = "Science Context:",
+                        text = "Why this mission?",
                         fontWeight = FontWeight.Bold,
-                        fontSize = 12.sp,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Gemini AI recommended this action based on your recent activity profile.",
+                        fontSize = 13.sp,
+                        color = EcoTextMuted
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFFF8FAFC))
+                            .padding(16.dp)
+                    ) {
+                        Column {
+                            Text(
+                                text = "AI Reasoning",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = EcoTextMuted,
+                                letterSpacing = 0.5.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = quest.reason.ifEmpty { "This action provides high CO₂ reduction with minimal lifestyle friction calculated against your baseline." },
+                                fontSize = 14.sp,
+                                color = MaterialTheme.colorScheme.onBackground,
+                                lineHeight = 20.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// --- Insights Screen (Future Earth Simulator) ---
+@Composable
+fun InsightsScreen(stats: UserStats?) {
+    val resolvedStats = stats ?: UserStats()
+    var showMethodology by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(24.dp)
+    ) {
+        // Hero Insights Header
+        Column {
+            Text(
+                text = "YOUR FUTURE EARTH",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = EcoTextMuted,
+                letterSpacing = 1.sp
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "See your long-term impact.",
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+        }
+
+        // Future Simulator Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                val currentAnnual = resolvedStats.annualEmissions
+                val oneYearCurrent = currentAnnual
+                val fiveYearCurrent = currentAnnual * 5.0
+
+                // Calculate annualized savings in tons from co2SavedCumulative (which is in kg)
+                // Let's assume their overall habits (completed cumulative) recur monthly.
+                // Dynamic Annualized Savings (Tons) = (cumulative saved kg * 12 months) / 1000 kg.
+                val annualSavedTons = (resolvedStats.co2SavedCumulative * 12.0) / 1000.0
+                val oneYearImproved = maxOf(0.1, currentAnnual - annualSavedTons)
+                val fiveYearImproved = oneYearImproved * 5.0
+
+                // Scenario C: Optimal Climate Champion target (assuming a standard full 30% reduction)
+                val targetOneYear = currentAnnual * 0.70
+                val targetFiveYear = targetOneYear * 5.0
+
+                Text(
+                    text = "Projected CO₂ Emissions (Scenario Modeling)",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Based on your real profile and completed mission progress of ${String.format("%.1f", resolvedStats.co2SavedCumulative)} kg CO₂.",
+                    fontSize = 13.sp,
+                    color = EcoTextMuted
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Scenario A: Baseline (No Change)
+                Text("Scenario A: Baseline (No Change)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = EcoDanger)
+                Spacer(modifier = Modifier.height(6.dp))
+                Text("If you maintain prior habits and complete no actions.", fontSize = 12.sp, color = EcoTextMuted)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column {
+                        Text("1 Year", fontSize = 11.sp, color = EcoTextMuted)
+                        Text(String.format("%.2f tons", oneYearCurrent), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("5 Years", fontSize = 11.sp, color = EcoTextMuted)
+                        Text(String.format("%.2f tons", fiveYearCurrent), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(color = Color(0xFFF1F5F9))
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Scenario B: With Completed Habits (Current Progress)
+                Text("Scenario B: With Completed Habits (Actual Savings)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = EcoSecondary)
+                Spacer(modifier = Modifier.height(6.dp))
+                Text("Your annualized profile factoring in completed quest habits.", fontSize = 12.sp, color = EcoTextMuted)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column {
+                        Text("1 Year", fontSize = 11.sp, color = EcoTextMuted)
+                        Text(String.format("%.2f tons", oneYearImproved), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = EcoSecondary)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("5 Years", fontSize = 11.sp, color = EcoTextMuted)
+                        Text(String.format("%.2f tons", fiveYearImproved), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = EcoSecondary)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                HorizontalDivider(color = Color(0xFFF1F5F9))
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Scenario C: Climate Champion (Optimal Target)
+                Text("Scenario C: Climate Champion (Optimal Target)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = EcoPrimary)
+                Spacer(modifier = Modifier.height(6.dp))
+                Text("If you complete 100% of daily quests recommended by Gemini AI.", fontSize = 12.sp, color = EcoTextMuted)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column {
+                        Text("1 Year", fontSize = 11.sp, color = EcoTextMuted)
+                        Text(String.format("%.2f tons", targetOneYear), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = EcoPrimary)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("5 Years", fontSize = 11.sp, color = EcoTextMuted)
+                        Text(String.format("%.2f tons", targetFiveYear), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = EcoPrimary)
+                    }
+                }
+            }
+        }
+
+        // Methodology Card
+        Card(
+            modifier = Modifier.fillMaxWidth().clickable { showMethodology = !showMethodology },
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        text = "Calculation Methodology",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Icon(if (showMethodology) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown, contentDescription = "Toggle")
+                }
+                
+                if (showMethodology) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("How we calculate your impact:", fontSize = 14.sp, color = EcoTextMuted)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    val methods = listOf(
+                        "Walking 1 km" to "≈ 0.21 kg CO₂ saved",
+                        "Cycling 1 km" to "≈ 0.17 kg CO₂ saved",
+                        "Reusable bottle" to "≈ 0.08 kg CO₂ saved",
+                        "Plant-based meal" to "≈ 1.40 kg CO₂ saved",
+                        "AC reduced 1 hour" to "≈ 0.50 kg CO₂ saved"
+                    )
+
+                    methods.forEach { (action, impact) ->
+                        Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text(action, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
+                            Text(impact, fontSize = 14.sp, color = EcoPrimary, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = quest.reason,
+                        text = "Data is combined with AI assessments of your real-world habits to create accurate, dynamic carbon reductions. Transparency builds trust.",
                         fontSize = 12.sp,
                         color = EcoTextMuted,
-                        lineHeight = 16.sp
+                        lineHeight = 18.sp
                     )
                 }
             }

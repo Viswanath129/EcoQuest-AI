@@ -13,7 +13,7 @@ val EcoDanger = Color(0xFFEF4444)
 val EcoBackground = Color(0xFFF8FAFC)
 val EcoCard = Color(0xFFFFFFFF)
 val EcoTextDark = Color(0xFF0F172A)
-val EcoTextMuted = Color(0xFF64748B)
+val EcoTextMuted = Color(0xFF475569)
 
 // Support default components
 val Purple80 = Color(0xFFD0BCFF)

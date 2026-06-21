@@ -20,7 +20,8 @@ private val EcoDarkColorScheme = darkColorScheme(
     onPrimary = Color.White,
     onSecondary = Color.White,
     onBackground = Color(0xFFF8FAFC),
-    onSurface = Color(0xFFF8FAFC)
+    onSurface = Color(0xFFF8FAFC),
+    onSurfaceVariant = Color(0xFF94A3B8) // Slate 400 - Highly legible on Slate 800/900
 )
 
 private val EcoLightColorScheme = lightColorScheme(
@@ -32,7 +33,8 @@ private val EcoLightColorScheme = lightColorScheme(
     onPrimary = Color.White,
     onSecondary = Color.White,
     onBackground = EcoTextDark,
-    onSurface = EcoTextDark
+    onSurface = EcoTextDark,
+    onSurfaceVariant = Color(0xFF334155) // Slate 700 - Highly legible on White/Off-white
 )
 
 @Composable

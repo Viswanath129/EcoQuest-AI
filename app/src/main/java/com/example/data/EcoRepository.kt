@@ -20,7 +20,7 @@ class EcoRepository(private val db: EcoDatabase) {
                 return@withTransaction false
             }
             
-            questDao.updateQuest(q.copy(completed = true))
+            questDao.updateQuest(q.copy(completed = true, timestamp = System.currentTimeMillis()))
             
             val currentStats = userStatsDao.getUserStatsSync(1) ?: UserStats()
             val newXp = currentStats.xp + xpGain

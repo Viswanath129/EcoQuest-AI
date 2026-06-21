@@ -51,6 +51,13 @@ class EcoViewModel(application: Application) : AndroidViewModel(application) {
     private val _apiKeyWarning = MutableStateFlow(!GeminiApiClient.isApiKeyValid())
     val apiKeyWarning: StateFlow<Boolean> = _apiKeyWarning.asStateFlow()
 
+    private val _isHealthConnectSynced = MutableStateFlow(true)
+    val isHealthConnectSynced: StateFlow<Boolean> = _isHealthConnectSynced.asStateFlow()
+
+    fun toggleHealthConnect() {
+        _isHealthConnectSynced.value = !_isHealthConnectSynced.value
+    }
+
     fun dismissCelebration() {
         _showCelebration.value = false
         _recentCelebrationQuest.value = null

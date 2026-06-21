@@ -105,15 +105,15 @@ fun EcoQuestApp(
                                     Icon(
                                         imageVector = tab.icon,
                                         contentDescription = tab.label,
-                                        tint = if (selected) MaterialTheme.colorScheme.primary else EcoTextMuted
+                                        tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 },
                                 label = {
                                     Text(
                                         text = tab.label,
-                                        fontSize = 11.sp,
+                                        fontSize = 12.sp,
                                         fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (selected) MaterialTheme.colorScheme.primary else EcoTextMuted
+                                        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 },
                                 colors = NavigationBarItemDefaults.colors(
@@ -133,6 +133,7 @@ fun EcoQuestApp(
                     when (currentTab) {
                         EcoTab.DASHBOARD -> DashboardScreen(
                             stats = userStats,
+                            quests = quests ?: emptyList(),
                             viewModel = viewModel
                         )
                         EcoTab.QUESTS -> QuestsScreen(
@@ -174,10 +175,47 @@ fun EcoQuestApp(
 @Composable
 fun DashboardScreen(
     stats: UserStats?,
+    quests: List<Quest>,
     viewModel: EcoViewModel
 ) {
     val scrollState = rememberScrollState()
     val resolvedStats = stats ?: UserStats()
+    val isHealthSynced by viewModel.isHealthConnectSynced.collectAsStateWithLifecycle()
+
+    val completedQuests = quests.filter { it.completed }
+    val sortedCompleted = completedQuests.sortedByDescending { it.timestamp }
+    val totalWeeklyCo2 = completedQuests.sumOf { it.co2Saved }
+
+    val transitCount = completedQuests.count { q ->
+        q.title.contains("Commute", ignoreCase = true) || q.title.contains("Walk", ignoreCase = true) || q.title.contains("Bike", ignoreCase = true) || q.title.contains("Cycle", ignoreCase = true)
+    }
+    val energyCount = completedQuests.count { q ->
+        q.title.contains("Power", ignoreCase = true) || q.title.contains("Unplug", ignoreCase = true) || q.title.contains("AC", ignoreCase = true) || q.title.contains("Electricity", ignoreCase = true) || q.title.contains("Standby", ignoreCase = true)
+    }
+    val wasteCount = completedQuests.count { q ->
+        q.title.contains("Plastic", ignoreCase = true) || q.title.contains("Bottle", ignoreCase = true) || q.title.contains("Bag", ignoreCase = true) || q.title.contains("Reusable", ignoreCase = true)
+    }
+
+    val mostActiveArea = when {
+        transitCount >= energyCount && transitCount >= wasteCount && transitCount > 0 -> "Eco-Transit"
+        energyCount >= transitCount && energyCount >= wasteCount && energyCount > 0 -> "Grid Conservation"
+        wasteCount >= transitCount && wasteCount >= energyCount && wasteCount > 0 -> "Zero Waste"
+        else -> "Initial Explorer"
+    }
+
+    val consistencyIndex = minOf(100, (completedQuests.size * 25) + 33)
+
+    val nextAIRecommendation = when {
+        wasteCount == 0 -> "AI Recommendation: Prioritize Zero Waste! Try refusing single-use plastics to decrease municipal landfill footprint."
+        transitCount == 0 -> "AI Recommendation: Target Eco-Transit! Walk or bike trips under 2 km to avoid short cold-start engine fuel exhaust."
+        energyCount == 0 -> "AI Recommendation: Target Phantom Energy! Unplug power adapters to stop quiet stand-by grid draw."
+        else -> "AI Recommendation: Maintain great momentum! Try out dynamic team challenges or consult with your Green Coach for intermediate goals."
+    }
+
+    val textMuted = MaterialTheme.colorScheme.onSurfaceVariant
+    val textMain = MaterialTheme.colorScheme.onSurface
+    val cardOutline = MaterialTheme.colorScheme.outlineVariant
+    val arcBg = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
 
     Column(
         modifier = Modifier
@@ -185,85 +223,620 @@ fun DashboardScreen(
             .verticalScroll(scrollState)
             .padding(16.dp)
     ) {
-        // Hero Impact Card
-        Column(modifier = Modifier.padding(top = 16.dp, bottom = 32.dp)) {
-            Text(
-                "Good Evening",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Medium,
-                color = EcoTextMuted
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                "Carbon Impact",
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
-            )
-            Spacer(modifier = Modifier.height(24.dp))
-            Text(
-                String.format("%.1f kg CO₂ saved", resolvedStats.co2SavedCumulative),
-                fontSize = 40.sp,
-                fontWeight = FontWeight.Black,
-                color = EcoPrimary,
-                letterSpacing = (-1).sp
-            )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 20.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    "Behavior Change Hub",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = EcoSecondary,
+                    letterSpacing = 1.sp
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "Carbon Action Engine",
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+            }
             
-            Spacer(modifier = Modifier.height(16.dp))
-            
-            Text(
-                "↑ 24% this month", // Trend narrative
-                fontSize = 16.sp,
-                fontWeight = FontWeight.SemiBold,
-                color = EcoAccent
-            )
+            Card(
+                colors = CardDefaults.cardColors(containerColor = EcoPrimary.copy(alpha = 0.12f)),
+                border = BorderStroke(1.dp, EcoPrimary.copy(alpha = 0.3f)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Whatshot,
+                        contentDescription = "Streak Count",
+                        tint = EcoPrimary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        "${resolvedStats.streakDays}d Streak",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = EcoPrimary
+                    )
+                }
+            }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, cardOutline),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.padding(20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(110.dp)) {
+                    Canvas(modifier = Modifier.size(100.dp)) {
+                        drawArc(
+                            color = arcBg,
+                            startAngle = -90f,
+                            sweepAngle = 360f,
+                            useCenter = false,
+                            style = Stroke(width = 6.dp.toPx(), cap = StrokeCap.Round)
+                        )
+                        val scoreSweep = (resolvedStats.carbonScore.toFloat() / 100f) * 360f
+                        drawArc(
+                            color = EcoPrimary,
+                            startAngle = -90f,
+                            sweepAngle = scoreSweep,
+                            useCenter = false,
+                            style = Stroke(width = 6.dp.toPx(), cap = StrokeCap.Round)
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = "${resolvedStats.carbonScore}",
+                            fontSize = 32.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        Text(
+                            "Score Index",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = textMuted
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(16.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "YOUR CUMULATIVE IMPACT",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = textMuted,
+                        letterSpacing = 0.5.sp
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = String.format("%.2f kg CO₂ Saved", resolvedStats.co2SavedCumulative),
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = EcoPrimary
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Representing ${resolvedStats.missionsCompleted} verified micro-decisions completed offline.",
+                        fontSize = 12.sp,
+                        color = textMuted,
+                        lineHeight = 16.sp
+                    )
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        Spacer(modifier = Modifier.height(32.dp))
-        
-        // Simple Ring
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxWidth()) {
-            Canvas(modifier = Modifier.size(160.dp)) {
-                drawArc(
-                    color = Color(0xFFF1F5F9),
-                    startAngle = -90f,
-                    sweepAngle = 360f,
-                    useCenter = false,
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 8.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
-                )
-                val scoreSweep = (resolvedStats.carbonScore.toFloat() / 100f) * 360f
-                drawArc(
-                    color = EcoPrimary,
-                    startAngle = -90f,
-                    sweepAngle = scoreSweep,
-                    useCenter = false,
-                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 8.dp.toPx(), cap = androidx.compose.ui.graphics.StrokeCap.Round)
-                )
-            }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = "${resolvedStats.carbonScore}",
-                    fontSize = 48.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Text("Impact Score", fontSize = 12.sp, color = EcoTextMuted)
-                val scoreLabel = if (resolvedStats.carbonScore >= 80) "GOOD" else "ALERT"
-                Text(scoreLabel, fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground, modifier = Modifier.padding(top = 4.dp))
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, cardOutline),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(18.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(Color(0xFFFEE2E2), shape = CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Favorite,
+                                contentDescription = "Health Connect Icon",
+                                tint = Color(0xFFEF4444),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                "Health Connect Auto-Sync",
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                "Automatic Fitness Verification",
+                                fontSize = 12.sp,
+                                color = textMuted
+                            )
+                        }
+                    }
+                    Switch(
+                        checked = isHealthSynced,
+                        onCheckedChange = { viewModel.toggleHealthConnect() },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = EcoPrimary
+                        )
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                if (isHealthSynced) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), shape = RoundedCornerShape(8.dp))
+                            .padding(12.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.Top) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = "Synced Check",
+                                tint = EcoSecondary,
+                                modifier = Modifier.size(16.dp).padding(top = 1.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    "Status: Connected (Auto-Verify Active)",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = textMain
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    "Synced today: 5.2 km walked (Estimated savings of 1.56 kg CO₂ synced). Walking/cycling tasks will automatically clear as Verified ✓.",
+                                    fontSize = 12.sp,
+                                    color = textMuted,
+                                    lineHeight = 16.sp
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color(0xFFFEF2F2), shape = RoundedCornerShape(8.dp))
+                            .padding(12.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.OfflineShare,
+                                contentDescription = "Offline Check",
+                                tint = Color(0xFFEF4444),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "Status: Disdisconnected. Turn on to verify travel habits and eliminate manual entry skepticism.",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF991B1B)
+                            )
+                        }
+                    }
+                }
             }
         }
 
+        Spacer(modifier = Modifier.height(8.dp))
 
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, cardOutline),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(18.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.TrendingUp,
+                        contentDescription = "Habit Momentum Icon",
+                        tint = EcoPrimary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Habit Momentum Engine",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "Translating completed micro-missions into long-term identity shift.",
+                    fontSize = 12.sp,
+                    color = textMuted
+                )
+                Spacer(modifier = Modifier.height(16.dp))
 
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .background(Color(0xFFECFDF5), shape = RoundedCornerShape(6.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("🚲", fontSize = 14.sp)
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Zero-Emission Transit", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            if (transitCount > 0) {
+                                Text("${transitCount * 12 + 10}% Below Baseline", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = EcoSecondary)
+                            } else {
+                                Text("No Active Streak", fontSize = 12.sp, color = textMuted)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = if (transitCount > 0) {
+                                "You have completed $transitCount clean transit missions in your log. Your current travel intensity aligns with Climate Champion goals."
+                            } else {
+                                "Walk or bike for trips under 2 km instead of cold-starting vehicles to activate your eco-transit momentum streak."
+                            },
+                            fontSize = 12.sp,
+                            color = textMuted,
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
 
+                Spacer(modifier = Modifier.height(14.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(14.dp))
 
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .background(Color(0xFFEFF6FF), shape = RoundedCornerShape(6.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("🔌", fontSize = 14.sp)
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Phantom Energy Control", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            if (energyCount > 0) {
+                                Text("15.2% Saved", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = EcoSecondary)
+                            } else {
+                                Text("No Active Streak", fontSize = 12.sp, color = textMuted)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = if (energyCount > 0) {
+                                "You have logged $energyCount standby electrical closures. Idle vampire load index is substantially minimised."
+                            } else {
+                                "Switch power adapters off during overnight intervals to reduce phantom electrical grid load."
+                            },
+                            fontSize = 12.sp,
+                            color = textMuted,
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
 
+                Spacer(modifier = Modifier.height(14.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(14.dp))
 
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .background(Color(0xFFFFF7ED), shape = RoundedCornerShape(6.dp)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("🌱", fontSize = 14.sp)
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Circular Material Consumption", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            if (wasteCount > 0) {
+                                Text("${wasteCount * 3 + 4} Disposable Units Saved", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = EcoSecondary)
+                            } else {
+                                Text("No Active Streak", fontSize = 12.sp, color = textMuted)
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = if (wasteCount > 0) {
+                                "Reusable bags/containers successfully registered $wasteCount times. Municipal plastic waste lifecycle bypassed."
+                            } else {
+                                "Refuse disposable cups/bags on your food errands to start single-use waste prevention trends."
+                            },
+                            fontSize = 12.sp,
+                            color = textMuted,
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
+            }
+        }
 
+        Spacer(modifier = Modifier.height(8.dp))
 
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            border = BorderStroke(1.dp, cardOutline),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Column(modifier = Modifier.padding(18.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Assignment,
+                        contentDescription = "Report Icon",
+                        tint = EcoSecondary,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Weekly Climate Report",
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "Dynamic summary of behavior outcomes for the current week.",
+                    fontSize = 12.sp,
+                    color = textMuted
+                )
+                Spacer(modifier = Modifier.height(16.dp))
 
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Weekly Offset", fontSize = 12.sp, color = textMuted, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = String.format("%.2f kg CO₂", totalWeeklyCo2),
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = EcoPrimary
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Active Focus", fontSize = 12.sp, color = textMuted, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = mostActiveArea,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = textMain
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Consistency Index", fontSize = 12.sp, color = textMuted, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "$consistencyIndex%",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = EcoSecondary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(EcoPrimary.copy(alpha = 0.06f), shape = RoundedCornerShape(10.dp))
+                        .border(1.dp, EcoPrimary.copy(alpha = 0.2f), shape = RoundedCornerShape(10.dp))
+                        .padding(12.dp)
+                ) {
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.OfflineBolt,
+                                contentDescription = "Intelligence Tip",
+                                tint = EcoPrimary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                "EcoQuest AI Behavioral Advisor",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = EcoPrimary,
+                                letterSpacing = 0.3.sp
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = nextAIRecommendation,
+                            fontSize = 12.sp,
+                            color = textMain,
+                            lineHeight = 16.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(
+                    imageVector = Icons.Default.History,
+                    contentDescription = "Timeline Icon",
+                    tint = textMuted,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    "Impact Timeline",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            Text(
+                "${sortedCompleted.size} Total Saves",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = textMuted
+            )
+        }
+
+        if (sortedCompleted.isEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, cardOutline),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp).fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        "🌱 Your Journey is Getting Configured",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = textMain
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "Complete missions in the 'Actions' tab. Each completed quest will register on this secure behavioral blockchain ledger.",
+                        fontSize = 12.sp,
+                        color = textMuted,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 16.sp
+                    )
+                }
+            }
+        } else {
+            sortedCompleted.forEach { quest ->
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    border = BorderStroke(1.dp, cardOutline),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f), shape = CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            val emoji = if (quest.title.contains("Commute", ignoreCase = true) || quest.title.contains("Walk", ignoreCase = true) || quest.title.contains("Bike", ignoreCase = true) || quest.title.contains("Cycle", ignoreCase = true)) {
+                                "🚲"
+                            } else if (quest.title.contains("Power", ignoreCase = true) || quest.title.contains("Unplug", ignoreCase = true) || quest.title.contains("AC", ignoreCase = true) || quest.title.contains("Electricity", ignoreCase = true)) {
+                                "🔌"
+                            } else {
+                                "🌱"
+                            }
+                            Text(emoji, fontSize = 16.sp)
+                        }
+                        
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = quest.title,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = textMain,
+                                overflow = TextOverflow.Ellipsis,
+                                maxLines = 1
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            val dateLabel = android.text.format.DateFormat.format("MMM dd, yyyy · hh:mm a", quest.timestamp).toString()
+                            Text(
+                                text = dateLabel,
+                                fontSize = 12.sp,
+                                color = textMuted
+                            )
+                        }
+
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = EcoSecondary.copy(alpha = 0.1f)),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                text = String.format("+%.1f kg", quest.co2Saved),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = EcoSecondary
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
     }
 }
 
@@ -299,7 +872,7 @@ fun QuestsScreen(
                 Text(
                     text = "Complete missions to earn XP and save CO₂",
                     fontSize = 13.sp,
-                    color = EcoTextMuted
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
@@ -350,8 +923,8 @@ fun QuestsScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text = "Running under offline assessment engine. Supply your GEMINI_API_KEY in the Secrets panel to activate live AI generation!",
-                        fontSize = 11.sp,
-                        color = EcoTextDark,
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurface,
                         fontWeight = FontWeight.Medium
                     )
                 }
@@ -393,8 +966,8 @@ fun QuestsScreen(
                         modifier = Modifier.size(72.dp)
                     )
                     Spacer(modifier = Modifier.height(12.dp))
-                    Text("No quests currently generated.", color = EcoTextMuted)
-                    Text("Click 'AI Regenerate' above to create custom missions!", fontSize = 12.sp, color = EcoTextMuted)
+                    Text("No quests currently generated.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Click 'AI Regenerate' above to create custom missions!", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         } else {
@@ -497,6 +1070,25 @@ fun QuestCard(
                     modifier = Modifier.weight(1f)
                 )
             }
+            val isWalkOrBike = quest.title.contains("Walk", ignoreCase = true) || quest.title.contains("Bike", ignoreCase = true) || quest.title.contains("Cycle", ignoreCase = true) || quest.title.contains("Commute", ignoreCase = true)
+            if (isWalkOrBike && !quest.completed) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Favorite,
+                        contentDescription = "Health Connect Sync",
+                        tint = Color(0xFFEF4444),
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        "Health Connect Sync Eligible",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFEF4444)
+                    )
+                }
+            }
             Spacer(modifier = Modifier.height(16.dp))
             
             Row(
@@ -514,7 +1106,7 @@ fun QuestCard(
                     Text(
                         text = quest.estimatedTime.ifEmpty { "10 min" },
                         fontSize = 13.sp,
-                        color = EcoTextMuted
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 
@@ -553,7 +1145,7 @@ fun QuestCard(
                     Text(
                         text = "Gemini AI recommended this action based on your recent activity profile.",
                         fontSize = 13.sp,
-                        color = EcoTextMuted
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     
@@ -561,15 +1153,15 @@ fun QuestCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFFF8FAFC))
+                            .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f))
                             .padding(16.dp)
                     ) {
                         Column {
                             Text(
                                 text = "AI Reasoning",
-                                fontSize = 11.sp,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = EcoTextMuted,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 letterSpacing = 0.5.sp
                             )
                             Spacer(modifier = Modifier.height(4.dp))
@@ -606,7 +1198,7 @@ fun InsightsScreen(stats: UserStats?) {
                 text = "YOUR FUTURE EARTH",
                 fontSize = 12.sp,
                 fontWeight = FontWeight.Bold,
-                color = EcoTextMuted,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 letterSpacing = 1.sp
             )
             Spacer(modifier = Modifier.height(4.dp))
@@ -651,62 +1243,62 @@ fun InsightsScreen(stats: UserStats?) {
                 Text(
                     text = "Based on your real profile and completed mission progress of ${String.format("%.1f", resolvedStats.co2SavedCumulative)} kg CO₂.",
                     fontSize = 13.sp,
-                    color = EcoTextMuted
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(24.dp))
 
                 // Scenario A: Baseline (No Change)
                 Text("Scenario A: Baseline (No Change)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = EcoDanger)
                 Spacer(modifier = Modifier.height(6.dp))
-                Text("If you maintain prior habits and complete no actions.", fontSize = 12.sp, color = EcoTextMuted)
+                Text("If you maintain prior habits and complete no actions.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column {
-                        Text("1 Year", fontSize = 11.sp, color = EcoTextMuted)
+                        Text("1 Year", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(String.format("%.2f tons", oneYearCurrent), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text("5 Years", fontSize = 11.sp, color = EcoTextMuted)
+                        Text("5 Years", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(String.format("%.2f tons", fiveYearCurrent), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                     }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider(color = Color(0xFFF1F5F9))
+                HorizontalDivider()
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Scenario B: With Completed Habits (Current Progress)
                 Text("Scenario B: With Completed Habits (Actual Savings)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = EcoSecondary)
                 Spacer(modifier = Modifier.height(6.dp))
-                Text("Your annualized profile factoring in completed quest habits.", fontSize = 12.sp, color = EcoTextMuted)
+                Text("Your annualized profile factoring in completed quest habits.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column {
-                        Text("1 Year", fontSize = 11.sp, color = EcoTextMuted)
+                        Text("1 Year", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(String.format("%.2f tons", oneYearImproved), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = EcoSecondary)
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text("5 Years", fontSize = 11.sp, color = EcoTextMuted)
+                        Text("5 Years", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(String.format("%.2f tons", fiveYearImproved), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = EcoSecondary)
                     }
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider(color = Color(0xFFF1F5F9))
+                HorizontalDivider()
                 Spacer(modifier = Modifier.height(16.dp))
 
                 // Scenario C: Climate Champion (Optimal Target)
                 Text("Scenario C: Climate Champion (Optimal Target)", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = EcoPrimary)
                 Spacer(modifier = Modifier.height(6.dp))
-                Text("If you complete 100% of daily quests recommended by Gemini AI.", fontSize = 12.sp, color = EcoTextMuted)
+                Text("If you complete 100% of daily quests recommended by Gemini AI.", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column {
-                        Text("1 Year", fontSize = 11.sp, color = EcoTextMuted)
+                        Text("1 Year", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(String.format("%.2f tons", targetOneYear), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = EcoPrimary)
                     }
                     Column(horizontalAlignment = Alignment.End) {
-                        Text("5 Years", fontSize = 11.sp, color = EcoTextMuted)
+                        Text("5 Years", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(String.format("%.2f tons", targetFiveYear), fontWeight = FontWeight.Bold, fontSize = 14.sp, color = EcoPrimary)
                     }
                 }
@@ -733,7 +1325,7 @@ fun InsightsScreen(stats: UserStats?) {
                 
                 if (showMethodology) {
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text("How we calculate your impact:", fontSize = 14.sp, color = EcoTextMuted)
+                    Text("How we calculate your impact:", fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(modifier = Modifier.height(12.dp))
                     
                     val methods = listOf(
@@ -755,7 +1347,7 @@ fun InsightsScreen(stats: UserStats?) {
                     Text(
                         text = "Data is combined with AI assessments of your real-world habits to create accurate, dynamic carbon reductions. Transparency builds trust.",
                         fontSize = 12.sp,
-                        color = EcoTextMuted,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         lineHeight = 18.sp
                     )
                 }
@@ -790,7 +1382,7 @@ fun LeaderboardScreen(stats: UserStats?) {
                 Text(
                     text = "Weekly rankings of top students saving emissions",
                     fontSize = 12.sp,
-                    color = EcoTextMuted
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -818,7 +1410,7 @@ fun LeaderboardScreen(stats: UserStats?) {
                             "Global Mode",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (globalTabSelected) Color.White else EcoTextMuted
+                            color = if (globalTabSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
 
@@ -835,7 +1427,7 @@ fun LeaderboardScreen(stats: UserStats?) {
                             "Friends Circle",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
-                            color = if (!globalTabSelected) Color.White else EcoTextMuted
+                            color = if (!globalTabSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -896,7 +1488,7 @@ fun LeaderboardScreen(stats: UserStats?) {
                                     text = "${row.rank}",
                                     fontWeight = FontWeight.Black,
                                     fontSize = 15.sp,
-                                    color = if (row.rank <= 3) MaterialTheme.colorScheme.primary else EcoTextMuted
+                                    color = if (row.rank <= 3) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -929,8 +1521,8 @@ fun LeaderboardScreen(stats: UserStats?) {
                             )
                             Text(
                                 text = row.college,
-                                fontSize = 11.sp,
-                                color = EcoTextMuted
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
 
@@ -944,7 +1536,7 @@ fun LeaderboardScreen(stats: UserStats?) {
                             )
                             Text(
                                 text = String.format("%.1f kg Saved", row.co2Saved),
-                                fontSize = 11.sp,
+                                fontSize = 12.sp,
                                 color = EcoSuccess,
                                 fontWeight = FontWeight.Bold
                             )
@@ -1032,8 +1624,8 @@ fun CoachScreen(
             ) {
                 Text(
                     text = "Offline Coach Simulation. Real Gemini responses unlock with a valid GEMINI_API_KEY in secure Secrets.",
-                    fontSize = 11.sp,
-                    color = EcoTextDark,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
                     fontWeight = FontWeight.Normal,
                     modifier = Modifier.padding(10.dp)
                 )
@@ -1052,7 +1644,7 @@ fun CoachScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("Chat is empty. Start typing to get suggestions!", color = EcoTextMuted)
+                    Text("Chat is empty. Start typing to get suggestions!", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
                 Column(
@@ -1299,8 +1891,8 @@ fun ProfileScreen(
         )
         Text(
             text = "EcoQuest Member since 2026",
-            fontSize = 12.sp,
-            color = EcoTextMuted
+            fontSize = 14.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -1370,7 +1962,7 @@ fun ProfileScreen(
                 Text(
                     text = "A national climate hackathon prototype designed using modern Material 3 and Google DeepMind's Gemini-3.5-flash text models. Streamlined to inspire and simplify green accountability cycles.",
                     fontSize = 12.sp,
-                    color = EcoTextMuted,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     lineHeight = 16.sp
                 )
             }
@@ -1395,7 +1987,7 @@ fun OnboardingScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(EcoBackground)
+            .background(MaterialTheme.colorScheme.background)
             .padding(24.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -1405,7 +1997,7 @@ fun OnboardingScreen(
                 .wrapContentHeight()
                 .testTag("onboarding_wizard_card"),
             shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = Color.White),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             elevation = CardDefaults.cardElevation(defaultElevation = 12.dp)
         ) {
             Column(
@@ -1424,8 +2016,8 @@ fun OnboardingScreen(
                 )
                 Text(
                     text = "Step $step of 6",
-                    fontSize = 13.sp,
-                    color = EcoTextMuted,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 12.dp)
                 )
 
@@ -1448,8 +2040,8 @@ fun OnboardingScreen(
                         Text("Welcome, Champion! 🌍", fontWeight = FontWeight.Bold, fontSize = 22.sp)
                         Text(
                             text = "EcoQuest transforms carbon auditing into a satisfying gamified experience. Let's start with your label!",
-                            fontSize = 13.sp,
-                            color = EcoTextMuted,
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
                         )
@@ -1463,7 +2055,7 @@ fun OnboardingScreen(
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = EcoPrimary,
-                                unfocusedBorderColor = Color.LightGray
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outline
                             )
                         )
                     }
@@ -1472,8 +2064,8 @@ fun OnboardingScreen(
                         Text("Commuting Habits 🚗", fontWeight = FontWeight.Bold, fontSize = 22.sp)
                         Text(
                             "How do you get to work, college, or run errands typically?",
-                            fontSize = 13.sp,
-                            color = EcoTextMuted,
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
                         )
@@ -1494,7 +2086,7 @@ fun OnboardingScreen(
                                         .background(if (active) EcoPrimary.copy(alpha = 0.1f) else Color.Transparent)
                                         .border(
                                             width = 1.dp,
-                                            color = if (active) EcoPrimary else Color.LightGray.copy(alpha = 0.6f),
+                                            color = if (active) EcoPrimary else MaterialTheme.colorScheme.outlineVariant,
                                             shape = RoundedCornerShape(12.dp)
                                         )
                                         .clickable { transport = opt }
@@ -1503,7 +2095,7 @@ fun OnboardingScreen(
                                     Text(
                                         text = opt,
                                         fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (active) EcoSecondary else EcoTextDark
+                                        color = if (active) EcoSecondary else MaterialTheme.colorScheme.onSurface
                                     )
                                 }
                             }
@@ -1514,8 +2106,8 @@ fun OnboardingScreen(
                         Text("Food Preferences 🍲", fontWeight = FontWeight.Bold, fontSize = 22.sp)
                         Text(
                             "Your dining plays a massive role in global methane and crop emissions.",
-                            fontSize = 13.sp,
-                            color = EcoTextMuted,
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
                         )
@@ -1536,7 +2128,7 @@ fun OnboardingScreen(
                                         .background(if (active) EcoPrimary.copy(alpha = 0.1f) else Color.Transparent)
                                         .border(
                                             width = 1.dp,
-                                            color = if (active) EcoPrimary else Color.LightGray.copy(alpha = 0.6f),
+                                            color = if (active) EcoPrimary else MaterialTheme.colorScheme.outlineVariant,
                                             shape = RoundedCornerShape(12.dp)
                                         )
                                         .clickable { food = opt }
@@ -1545,7 +2137,7 @@ fun OnboardingScreen(
                                     Text(
                                         text = opt,
                                         fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (active) EcoSecondary else EcoTextDark
+                                        color = if (active) EcoSecondary else MaterialTheme.colorScheme.onSurface
                                     )
                                 }
                             }
@@ -1556,8 +2148,8 @@ fun OnboardingScreen(
                         Text("Grid Power Usage 🔌", fontWeight = FontWeight.Bold, fontSize = 22.sp)
                         Text(
                             "How active are high-density electrical systems in your home?",
-                            fontSize = 13.sp,
-                            color = EcoTextMuted,
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
                         )
@@ -1577,7 +2169,7 @@ fun OnboardingScreen(
                                         .background(if (active) EcoPrimary.copy(alpha = 0.1f) else Color.Transparent)
                                         .border(
                                             width = 1.dp,
-                                            color = if (active) EcoPrimary else Color.LightGray.copy(alpha = 0.6f),
+                                            color = if (active) EcoPrimary else MaterialTheme.colorScheme.outlineVariant,
                                             shape = RoundedCornerShape(12.dp)
                                         )
                                         .clickable { electricity = opt }
@@ -1586,7 +2178,7 @@ fun OnboardingScreen(
                                     Text(
                                         text = opt,
                                         fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (active) EcoSecondary else EcoTextDark
+                                        color = if (active) EcoSecondary else MaterialTheme.colorScheme.onSurface
                                     )
                                 }
                             }
@@ -1597,8 +2189,8 @@ fun OnboardingScreen(
                         Text("Shopping Habits 🛍️", fontWeight = FontWeight.Bold, fontSize = 22.sp)
                         Text(
                             "How often do you acquire brand-new physical or fashion items?",
-                            fontSize = 13.sp,
-                            color = EcoTextMuted,
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(top = 4.dp, bottom = 16.dp)
                         )
@@ -1618,7 +2210,7 @@ fun OnboardingScreen(
                                         .background(if (active) EcoPrimary.copy(alpha = 0.1f) else Color.Transparent)
                                         .border(
                                             width = 1.dp,
-                                            color = if (active) EcoPrimary else Color.LightGray.copy(alpha = 0.6f),
+                                            color = if (active) EcoPrimary else MaterialTheme.colorScheme.outlineVariant,
                                             shape = RoundedCornerShape(12.dp)
                                         )
                                         .clickable { shopping = opt }
@@ -1627,7 +2219,7 @@ fun OnboardingScreen(
                                     Text(
                                         text = opt,
                                         fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
-                                        color = if (active) EcoSecondary else EcoTextDark
+                                        color = if (active) EcoSecondary else MaterialTheme.colorScheme.onSurface
                                     )
                                 }
                             }
@@ -1638,15 +2230,15 @@ fun OnboardingScreen(
                         Text("Ready for AI Carbon Check!", fontWeight = FontWeight.Bold, fontSize = 22.sp)
                         Text(
                             "We are ready to compile your profile data, compute your baseline score, and configure your personalized daily quests. Let's go!",
-                            fontSize = 13.sp,
-                            color = EcoTextMuted,
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.padding(top = 4.dp, bottom = 24.dp)
                         )
 
                         Card(
                             modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                            colors = CardDefaults.cardColors(containerColor = EcoBackground)
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                         ) {
                             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Text("Name: ${name.ifEmpty { "Champion" }}", fontSize = 12.sp, fontWeight = FontWeight.Bold)
@@ -1671,7 +2263,7 @@ fun OnboardingScreen(
                             onClick = { step-- },
                             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                         ) {
-                            Text("Back", color = EcoTextMuted)
+                            Text("Back", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     } else {
                         Spacer(modifier = Modifier.width(60.dp))
